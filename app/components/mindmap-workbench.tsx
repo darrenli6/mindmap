@@ -536,6 +536,7 @@ Q`
 export default function MindmapWorkbench() {
   const [markdown, setMarkdown] = useState(sampleMarkdown)
   const [isExporting, setIsExporting] = useState(false)
+  const [isPasting, setIsPasting] = useState(false)
   const deferredMarkdown = useDeferredValue(markdown)
   const svgTitleId = useId()
   const svgRef = useRef<SVGSVGElement | null>(null)
@@ -576,6 +577,24 @@ export default function MindmapWorkbench() {
       window.setTimeout(() => URL.revokeObjectURL(url), 1000)
     } finally {
       setIsExporting(false)
+    }
+  }
+
+  const clearMarkdown = () => {
+    setMarkdown('')
+  }
+
+  const pasteMarkdown = async () => {
+    if (!navigator.clipboard) {
+      return
+    }
+
+    setIsPasting(true)
+    try {
+      const text = await navigator.clipboard.readText()
+      setMarkdown(text)
+    } finally {
+      setIsPasting(false)
     }
   }
 
@@ -625,9 +644,28 @@ export default function MindmapWorkbench() {
 
         <section className="grid min-h-[calc(100vh-11rem)] grid-cols-1 gap-6 lg:grid-cols-[minmax(340px,0.8fr)_minmax(0,1.6fr)]">
           <div className="flex min-h-[420px] flex-col overflow-hidden rounded-[30px] border border-[#f0e9e9] bg-white shadow-[0_18px_34px_rgba(15,23,42,0.04)]">
-            <div className="border-b border-[#f1eded] px-5 py-4">
-              <h2 className="text-lg font-semibold text-slate-950">Markdown</h2>
-              <p className="mt-1 text-sm text-slate-500">左侧编辑内容，右侧生成近似示例图风格的导图。</p>
+            <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[#f1eded] px-5 py-4">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-950">Markdown</h2>
+                <p className="mt-1 text-sm text-slate-500">左侧编辑内容，右侧生成近似示例图风格的导图。</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={pasteMarkdown}
+                  disabled={isPasting}
+                  className="inline-flex h-9 items-center justify-center rounded-full border border-slate-300 bg-white px-4 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isPasting ? '粘贴中...' : '粘贴覆盖'}
+                </button>
+                <button
+                  type="button"
+                  onClick={clearMarkdown}
+                  className="inline-flex h-9 items-center justify-center rounded-full border border-slate-300 bg-white px-4 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
+                >
+                  清空
+                </button>
+              </div>
             </div>
             <textarea
               value={markdown}
