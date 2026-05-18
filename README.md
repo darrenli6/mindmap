@@ -24,7 +24,7 @@ The app provides:
 - Supports Markdown headings and lists
 - Automatically builds hierarchical mind map branches
 - Adjusts node width based on content length
-- Uses colored top-level branches and curved connector lines
+- Uses colored top-level branches and straight connector lines
 - Exports the current mind map as PNG or PDF
 
 ## Tech Stack

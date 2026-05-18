@@ -107,8 +107,6 @@ const MIN_ROOT_HEIGHT = 44
 const FONT_SIZE = 14
 const ROOT_FONT_SIZE = 18
 const LEAF_TRAIL = 42
-const BOX_ICON_SIZE = 12   // icon bounding width
-const BOX_ICON_INSET = BOX_ICON_SIZE + 4  // extra left offset added to text x
 
 const BRANCH_COLORS = ['#F97316', '#A855F7', '#B7791F', '#FF5CB8', '#2563EB', '#14B8A6']
 
@@ -274,12 +272,11 @@ function measureTree(
     (max, line) => Math.max(max, estimateTextWidth(line, depth === 0 ? ROOT_FONT_SIZE : FONT_SIZE)),
     0,
   )
-  const iconInset = (depth === 0 || (depth === 1 && hasChildren)) ? BOX_ICON_INSET : 0
   const width =
     depth === 0
-      ? Math.max(ROOT_MIN_WIDTH, Math.min(360, widestLine + BOX_PADDING_X * 2 + iconInset))
+      ? Math.max(ROOT_MIN_WIDTH, Math.min(360, widestLine + BOX_PADDING_X * 2))
       : hasChildren
-        ? Math.max(NODE_MIN_WIDTH, Math.min(NODE_MAX_WIDTH, widestLine + BOX_PADDING_X * 2 + iconInset))
+        ? Math.max(NODE_MIN_WIDTH, Math.min(NODE_MAX_WIDTH, widestLine + BOX_PADDING_X * 2))
         : Math.max(LEAF_MIN_WIDTH, Math.min(LEAF_MAX_WIDTH, widestLine))
   const lineHeight = hasChildren || depth === 0 ? BOX_LINE_HEIGHT : LEAF_LINE_HEIGHT
   const minHeight = depth === 0 ? MIN_ROOT_HEIGHT : hasChildren ? MIN_BOX_HEIGHT : lines.length * lineHeight
@@ -387,52 +384,26 @@ function layoutTree(root: MeasuredNode): LayoutResult {
   return { positioned, edges, width, height }
 }
 
-// Each entry renders into a 12×14 local coordinate space
-const BOX_ICONS = [
-  // 0 — Clipboard
-  (color: string, fill: string) => (
-    <>
-      <rect x={0} y={2.5} width={12} height={11.5} rx={1.8} fill="none" stroke={color} strokeWidth={1.3} />
-      <rect x={3} y={0} width={6} height={4} rx={1} fill={fill} stroke={color} strokeWidth={1.3} />
-      <line x1={2.5} y1={7}  x2={9.5} y2={7}  stroke={color} strokeWidth={1.1} strokeLinecap="round" />
-      <line x1={2.5} y1={9}  x2={9.5} y2={9}  stroke={color} strokeWidth={1.1} strokeLinecap="round" />
-      <line x1={2.5} y1={11} x2={7}   y2={11} stroke={color} strokeWidth={1.1} strokeLinecap="round" />
-    </>
-  ),
-  // 1 — Bookmark
-  (color: string, fill: string) => (
-    <path d="M1,0 L11,0 L11,14 L6,10.5 L1,14 Z" fill={fill} stroke={color} strokeWidth={1.3} strokeLinejoin="round" />
-  ),
-  // 2 — Star
-  (color: string, fill: string) => (
-    <path d="M6,0.5 L7.6,4.8 L12,5 L8.7,7.8 L9.8,12.5 L6,10 L2.2,12.5 L3.3,7.8 L0,5 L4.4,4.8 Z" fill={fill} stroke={color} strokeWidth={1.2} strokeLinejoin="round" />
-  ),
-  // 3 — Diamond
-  (color: string, fill: string) => (
-    <>
-      <path d="M6,0.5 L11.5,7 L6,13.5 L0.5,7 Z" fill={fill} stroke={color} strokeWidth={1.3} strokeLinejoin="round" />
-      <line x1={0.5} y1={7} x2={11.5} y2={7} stroke={color} strokeWidth={0.9} opacity={0.45} />
-    </>
-  ),
-  // 4 — Lightning bolt
-  (color: string, fill: string) => (
-    <path d="M8,0.5 L3,7.5 L6.5,7.5 L4.5,13.5 L10,6 L6.5,6 Z" fill={fill} stroke={color} strokeWidth={1.2} strokeLinejoin="round" />
-  ),
-  // 5 — Tag / label
-  (color: string, fill: string) => (
-    <>
-      <path d="M0.5,3.5 L8,3.5 L11.5,7 L8,10.5 L0.5,10.5 Z" fill={fill} stroke={color} strokeWidth={1.3} strokeLinejoin="round" />
-      <circle cx={3} cy={7} r={1.5} fill={color} opacity={0.75} />
-    </>
-  ),
-]
-
 function colorForBranch(index: number) {
   return BRANCH_COLORS[((index % BRANCH_COLORS.length) + BRANCH_COLORS.length) % BRANCH_COLORS.length]
 }
 
-function alpha(hex: string, opacity: string) {
-  return `${hex}${opacity}`
+function tintColor(hex: string, amount: number) {
+  const normalized = hex.replace('#', '')
+
+  if (normalized.length !== 6) {
+    return hex
+  }
+
+  const channel = (index: number) => Number.parseInt(normalized.slice(index, index + 2), 16)
+  const mix = (value: number) => Math.round(value + (255 - value) * amount)
+  const toHex = (value: number) => value.toString(16).padStart(2, '0')
+
+  const red = mix(channel(0))
+  const green = mix(channel(2))
+  const blue = mix(channel(4))
+
+  return `#${toHex(red)}${toHex(green)}${toHex(blue)}`
 }
 
 function renderPath(from: PositionedNode, to: PositionedNode) {
@@ -440,10 +411,9 @@ function renderPath(from: PositionedNode, to: PositionedNode) {
   const startY = from.y + from.height / 2
   const endX = to.x
   const endY = to.y + to.height / 2
-  const delta = endX - startX
-  const control = Math.max(36, delta * 0.34)
+  const elbowX = startX + Math.max(24, (endX - startX) * 0.38)
 
-  return `M ${startX} ${startY} C ${startX + control} ${startY}, ${endX - control} ${endY}, ${endX} ${endY}`
+  return `M ${startX} ${startY} L ${elbowX} ${startY} L ${elbowX} ${endY} L ${endX} ${endY}`
 }
 
 async function svgToCanvas(svg: SVGSVGElement, width: number, height: number, scale = 2) {
@@ -722,7 +692,7 @@ export default function MindmapWorkbench() {
           <div className="flex min-h-[420px] flex-col overflow-hidden rounded-[30px] border border-[#f0e9e9] bg-[#fffefe] shadow-[0_18px_34px_rgba(15,23,42,0.04)]">
             <div className="border-b border-[#f1eded] px-5 py-4">
               <h2 className="text-lg font-semibold text-slate-950">思维导图</h2>
-              <p className="mt-1 text-sm text-slate-500">主分支分色、曲线连线、轻边框标签、纯净浅底导出。</p>
+              <p className="mt-1 text-sm text-slate-500">主分支分色、折线连线、轻边框标签、纯净浅底导出。</p>
             </div>
             <div className="flex-1 overflow-auto p-4">
               <svg
@@ -737,7 +707,8 @@ export default function MindmapWorkbench() {
                 <rect width={width} height={height} fill={BACKGROUND} />
 
                 {edges.map(({ from, to }) => {
-                  const color = colorForBranch(to.topLevelIndex)
+                  const branchColor = colorForBranch(to.topLevelIndex)
+                  const color = from.depth === 0 ? branchColor : tintColor(branchColor, 0.78)
                   return (
                     <path
                       key={`${from.id}-${to.id}`}
@@ -752,8 +723,12 @@ export default function MindmapWorkbench() {
                 })}
 
                 {positioned.map((node) => {
-                  const color = node.depth === 0 ? '#2563EB' : colorForBranch(node.topLevelIndex)
-                  const fill = node.depth === 0 ? '#ffffff' : alpha(color, '12')
+                  const color = colorForBranch(node.topLevelIndex)
+                  const isRoot = node.depth === 0
+                  const lightLineColor = tintColor(color, 0.78)
+                  const boxFill = isRoot ? '#172033' : tintColor(color, 0.72)
+                  const boxStroke = isRoot ? '#172033' : boxFill
+                  const textColor = isRoot ? '#ffffff' : '#111111'
 
                   if (!node.hasChildren && node.depth > 0) {
                     return (
@@ -779,7 +754,7 @@ export default function MindmapWorkbench() {
                           x2={node.width + LEAF_TRAIL}
                           y1={node.height + 4}
                           y2={node.height + 4}
-                          stroke={alpha(color, 'B3')}
+                          stroke={lightLineColor}
                           strokeWidth="1.4"
                           strokeLinecap="round"
                         />
@@ -792,64 +767,23 @@ export default function MindmapWorkbench() {
                       <rect
                         width={node.width}
                         height={node.height}
-                        rx={node.depth === 0 ? 16 : 12}
-                        fill={fill}
-                        stroke={color}
-                        strokeWidth={node.depth === 0 ? 2.6 : 1.9}
+                        rx={isRoot ? 16 : 12}
+                        fill={boxFill}
+                        stroke={boxStroke}
+                        strokeWidth={0}
                       />
 
-
-                      {/* Icon — root uses icon 0, depth-1 cycles through remaining icons */}
-                      {(node.depth === 0 || node.depth === 1) && (
-                        <g transform={`translate(4, ${node.height / 2 - 7})`} opacity={0.52}>
-                          {BOX_ICONS[
-                            node.depth === 0
-                              ? 0
-                              : ((node.topLevelIndex + 1) % BOX_ICONS.length)
-                          ](color, fill)}
-                        </g>
-                      )}
-
-                      {/* depth-2+ boxes with children: left accent bar */}
-                      {node.depth >= 2 && node.hasChildren && (
-                        <rect
-                          x={6}
-                          y={9}
-                          width={3.5}
-                          height={node.height - 18}
-                          rx={1.75}
-                          fill={color}
-                          opacity={0.55}
-                        />
-                      )}
-
-
-                      {/* Depth-2+ boxes with children: small chevron on right */}
-                      {node.depth >= 2 && node.hasChildren && (
-                        <path
-                          d={`M${node.width - 16} ${node.height / 2 - 5} L${node.width - 10} ${node.height / 2} L${node.width - 16} ${node.height / 2 + 5}`}
-                          fill="none"
-                          stroke={color}
-                          strokeWidth={1.8}
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          opacity={0.55}
-                        />
-                      )}
-
-                     
-
                       <text
-                        fill={node.depth === 0 ? '#1e293b' : '#2a2a2a'}
-                        fontSize={node.depth === 0 ? ROOT_FONT_SIZE : FONT_SIZE}
-                        fontWeight={node.depth === 0 ? '700' : '600'}
+                        fill={textColor}
+                        fontSize={isRoot ? ROOT_FONT_SIZE : FONT_SIZE}
+                        fontWeight={isRoot ? '700' : '600'}
                         fontFamily="var(--font-sans)"
                       >
                         {node.lines.map((line, index) => (
                           <tspan
                             key={`${node.id}-${index}`}
-                            x={BOX_PADDING_X + ((node.depth === 0 || node.depth === 1) ? BOX_ICON_INSET : 0)}
-                            y={BOX_PADDING_Y + (node.depth === 0 ? ROOT_FONT_SIZE : FONT_SIZE) + index * BOX_LINE_HEIGHT}
+                            x={BOX_PADDING_X}
+                            y={BOX_PADDING_Y + (isRoot ? ROOT_FONT_SIZE : FONT_SIZE) + index * BOX_LINE_HEIGHT}
                           >
                             {line}
                           </tspan>
