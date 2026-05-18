@@ -837,32 +837,7 @@ export default function MindmapWorkbench() {
                         />
                       )}
 
-                      {/* Depth-1 box: child count pill at bottom-right */}
-                      {node.depth === 1 && node.children.length > 0 && node.height >= 52 && (
-                        <g>
-                          <rect
-                            x={node.width - BOX_PADDING_X - node.children.length * 7 - 10}
-                            y={node.height - 18}
-                            width={node.children.length * 7 + 18}
-                            height={13}
-                            rx={6.5}
-                            fill={color}
-                            opacity={0.14}
-                          />
-                          <text
-                            x={node.width - BOX_PADDING_X - 2}
-                            y={node.height - 8}
-                            textAnchor="end"
-                            fill={color}
-                            fontSize={9}
-                            fontWeight="600"
-                            fontFamily="var(--font-sans)"
-                            opacity={0.75}
-                          >
-                            {node.children.length} 项
-                          </text>
-                        </g>
-                      )}
+                     
 
                       <text
                         fill={node.depth === 0 ? '#1e293b' : '#2a2a2a'}
