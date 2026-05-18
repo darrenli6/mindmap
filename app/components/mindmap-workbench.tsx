@@ -89,7 +89,7 @@ const sampleMarkdown = `# 总体目标
 - 常态化推进`
 
 const BACKGROUND = '#FFFEFE'
-const ROOT_MIN_WIDTH = 250
+const ROOT_MIN_WIDTH = 80
 const NODE_MIN_WIDTH = 128
 const NODE_MAX_WIDTH = 320
 const LEAF_MIN_WIDTH = 88
@@ -103,10 +103,12 @@ const BOX_PADDING_Y = 12
 const LEAF_LINE_HEIGHT = 18
 const BOX_LINE_HEIGHT = 18
 const MIN_BOX_HEIGHT = 40
-const MIN_ROOT_HEIGHT = 74
+const MIN_ROOT_HEIGHT = 44
 const FONT_SIZE = 14
 const ROOT_FONT_SIZE = 18
 const LEAF_TRAIL = 42
+const BOX_ICON_SIZE = 12   // icon bounding width
+const BOX_ICON_INSET = BOX_ICON_SIZE + 4  // extra left offset added to text x
 
 const BRANCH_COLORS = ['#F97316', '#A855F7', '#B7791F', '#FF5CB8', '#2563EB', '#14B8A6']
 
@@ -272,11 +274,12 @@ function measureTree(
     (max, line) => Math.max(max, estimateTextWidth(line, depth === 0 ? ROOT_FONT_SIZE : FONT_SIZE)),
     0,
   )
+  const iconInset = (depth === 0 || (depth === 1 && hasChildren)) ? BOX_ICON_INSET : 0
   const width =
     depth === 0
-      ? Math.max(ROOT_MIN_WIDTH, Math.min(360, widestLine + BOX_PADDING_X * 2))
+      ? Math.max(ROOT_MIN_WIDTH, Math.min(360, widestLine + BOX_PADDING_X * 2 + iconInset))
       : hasChildren
-        ? Math.max(NODE_MIN_WIDTH, Math.min(NODE_MAX_WIDTH, widestLine + BOX_PADDING_X * 2))
+        ? Math.max(NODE_MIN_WIDTH, Math.min(NODE_MAX_WIDTH, widestLine + BOX_PADDING_X * 2 + iconInset))
         : Math.max(LEAF_MIN_WIDTH, Math.min(LEAF_MAX_WIDTH, widestLine))
   const lineHeight = hasChildren || depth === 0 ? BOX_LINE_HEIGHT : LEAF_LINE_HEIGHT
   const minHeight = depth === 0 ? MIN_ROOT_HEIGHT : hasChildren ? MIN_BOX_HEIGHT : lines.length * lineHeight
@@ -383,6 +386,46 @@ function layoutTree(root: MeasuredNode): LayoutResult {
 
   return { positioned, edges, width, height }
 }
+
+// Each entry renders into a 12×14 local coordinate space
+const BOX_ICONS = [
+  // 0 — Clipboard
+  (color: string, fill: string) => (
+    <>
+      <rect x={0} y={2.5} width={12} height={11.5} rx={1.8} fill="none" stroke={color} strokeWidth={1.3} />
+      <rect x={3} y={0} width={6} height={4} rx={1} fill={fill} stroke={color} strokeWidth={1.3} />
+      <line x1={2.5} y1={7}  x2={9.5} y2={7}  stroke={color} strokeWidth={1.1} strokeLinecap="round" />
+      <line x1={2.5} y1={9}  x2={9.5} y2={9}  stroke={color} strokeWidth={1.1} strokeLinecap="round" />
+      <line x1={2.5} y1={11} x2={7}   y2={11} stroke={color} strokeWidth={1.1} strokeLinecap="round" />
+    </>
+  ),
+  // 1 — Bookmark
+  (color: string, fill: string) => (
+    <path d="M1,0 L11,0 L11,14 L6,10.5 L1,14 Z" fill={fill} stroke={color} strokeWidth={1.3} strokeLinejoin="round" />
+  ),
+  // 2 — Star
+  (color: string, fill: string) => (
+    <path d="M6,0.5 L7.6,4.8 L12,5 L8.7,7.8 L9.8,12.5 L6,10 L2.2,12.5 L3.3,7.8 L0,5 L4.4,4.8 Z" fill={fill} stroke={color} strokeWidth={1.2} strokeLinejoin="round" />
+  ),
+  // 3 — Diamond
+  (color: string, fill: string) => (
+    <>
+      <path d="M6,0.5 L11.5,7 L6,13.5 L0.5,7 Z" fill={fill} stroke={color} strokeWidth={1.3} strokeLinejoin="round" />
+      <line x1={0.5} y1={7} x2={11.5} y2={7} stroke={color} strokeWidth={0.9} opacity={0.45} />
+    </>
+  ),
+  // 4 — Lightning bolt
+  (color: string, fill: string) => (
+    <path d="M8,0.5 L3,7.5 L6.5,7.5 L4.5,13.5 L10,6 L6.5,6 Z" fill={fill} stroke={color} strokeWidth={1.2} strokeLinejoin="round" />
+  ),
+  // 5 — Tag / label
+  (color: string, fill: string) => (
+    <>
+      <path d="M0.5,3.5 L8,3.5 L11.5,7 L8,10.5 L0.5,10.5 Z" fill={fill} stroke={color} strokeWidth={1.3} strokeLinejoin="round" />
+      <circle cx={3} cy={7} r={1.5} fill={color} opacity={0.75} />
+    </>
+  ),
+]
 
 function colorForBranch(index: number) {
   return BRANCH_COLORS[((index % BRANCH_COLORS.length) + BRANCH_COLORS.length) % BRANCH_COLORS.length]
@@ -754,6 +797,73 @@ export default function MindmapWorkbench() {
                         stroke={color}
                         strokeWidth={node.depth === 0 ? 2.6 : 1.9}
                       />
+
+
+                      {/* Icon — root uses icon 0, depth-1 cycles through remaining icons */}
+                      {(node.depth === 0 || node.depth === 1) && (
+                        <g transform={`translate(4, ${node.height / 2 - 7})`} opacity={0.52}>
+                          {BOX_ICONS[
+                            node.depth === 0
+                              ? 0
+                              : ((node.topLevelIndex + 1) % BOX_ICONS.length)
+                          ](color, fill)}
+                        </g>
+                      )}
+
+                      {/* depth-2+ boxes with children: left accent bar */}
+                      {node.depth >= 2 && node.hasChildren && (
+                        <rect
+                          x={6}
+                          y={9}
+                          width={3.5}
+                          height={node.height - 18}
+                          rx={1.75}
+                          fill={color}
+                          opacity={0.55}
+                        />
+                      )}
+
+
+                      {/* Depth-2+ boxes with children: small chevron on right */}
+                      {node.depth >= 2 && node.hasChildren && (
+                        <path
+                          d={`M${node.width - 16} ${node.height / 2 - 5} L${node.width - 10} ${node.height / 2} L${node.width - 16} ${node.height / 2 + 5}`}
+                          fill="none"
+                          stroke={color}
+                          strokeWidth={1.8}
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          opacity={0.55}
+                        />
+                      )}
+
+                      {/* Depth-1 box: child count pill at bottom-right */}
+                      {node.depth === 1 && node.children.length > 0 && node.height >= 52 && (
+                        <g>
+                          <rect
+                            x={node.width - BOX_PADDING_X - node.children.length * 7 - 10}
+                            y={node.height - 18}
+                            width={node.children.length * 7 + 18}
+                            height={13}
+                            rx={6.5}
+                            fill={color}
+                            opacity={0.14}
+                          />
+                          <text
+                            x={node.width - BOX_PADDING_X - 2}
+                            y={node.height - 8}
+                            textAnchor="end"
+                            fill={color}
+                            fontSize={9}
+                            fontWeight="600"
+                            fontFamily="var(--font-sans)"
+                            opacity={0.75}
+                          >
+                            {node.children.length} 项
+                          </text>
+                        </g>
+                      )}
+
                       <text
                         fill={node.depth === 0 ? '#1e293b' : '#2a2a2a'}
                         fontSize={node.depth === 0 ? ROOT_FONT_SIZE : FONT_SIZE}
@@ -763,7 +873,7 @@ export default function MindmapWorkbench() {
                         {node.lines.map((line, index) => (
                           <tspan
                             key={`${node.id}-${index}`}
-                            x={BOX_PADDING_X}
+                            x={BOX_PADDING_X + ((node.depth === 0 || node.depth === 1) ? BOX_ICON_INSET : 0)}
                             y={BOX_PADDING_Y + (node.depth === 0 ? ROOT_FONT_SIZE : FONT_SIZE) + index * BOX_LINE_HEIGHT}
                           >
                             {line}
