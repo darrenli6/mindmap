@@ -97,7 +97,9 @@ const LEAF_MAX_WIDTH = 320
 const COLUMN_GAP = 74
 const ROOT_X = 30
 const MARGIN_Y = 36
-const ROW_GAP = 16
+const ROOT_BRANCH_GAP = 34
+const SECTION_BRANCH_GAP = 24
+const DETAIL_BRANCH_GAP = 18
 const BOX_PADDING_X = 18
 const BOX_PADDING_Y = 12
 const LEAF_LINE_HEIGHT = 18
@@ -302,13 +304,36 @@ function measureTree(
   }
 }
 
+function nodeFootprintHeight(node: MeasuredNode) {
+  return Math.max(node.height, 30)
+}
+
+function siblingGap(parentDepth: number, previous: MeasuredNode, next: MeasuredNode) {
+  const baseGap =
+    parentDepth === 0 ? ROOT_BRANCH_GAP : parentDepth === 1 ? SECTION_BRANCH_GAP : DETAIL_BRANCH_GAP
+  const heightPressure = Math.max(previous.height, next.height) - MIN_BOX_HEIGHT
+  const linePressure = Math.max(previous.lines.length, next.lines.length) - 1
+  const branchPressure = previous.hasChildren || next.hasChildren ? 8 : 0
+
+  return (
+    baseGap +
+    Math.max(0, heightPressure) * 0.35 +
+    Math.max(0, linePressure) * 4 +
+    branchPressure
+  )
+}
+
 function subtreeHeight(node: MeasuredNode): number {
   if (!node.children.length) {
-    return Math.max(node.height, 24)
+    return nodeFootprintHeight(node)
   }
 
-  const childHeight = node.children.reduce((sum, child) => sum + subtreeHeight(child), 0)
-  return Math.max(node.height, childHeight + ROW_GAP * Math.max(0, node.children.length - 1))
+  const childrenHeight = node.children.reduce((sum, child) => sum + subtreeHeight(child), 0)
+  const gapsHeight = node.children.slice(1).reduce((sum, child, index) => {
+    return sum + siblingGap(node.depth, node.children[index], child)
+  }, 0)
+
+  return Math.max(node.height, childrenHeight + gapsHeight)
 }
 
 function collectDepthWidths(root: MeasuredNode) {
@@ -327,7 +352,6 @@ function collectDepthWidths(root: MeasuredNode) {
 }
 
 function layoutTree(root: MeasuredNode): LayoutResult {
-  let cursorY = MARGIN_Y
   let maxDepth = 0
   const positioned: PositionedNode[] = []
   const edges: Edge[] = []
@@ -338,21 +362,40 @@ function layoutTree(root: MeasuredNode): LayoutResult {
     depthOffsets[depth] = depthOffsets[depth - 1] + (depthWidths[depth - 1] ?? 0) + COLUMN_GAP
   }
 
-  function walk(node: MeasuredNode, depth: number, parent?: PositionedNode): PositionedNode {
+  function walk(
+    node: MeasuredNode,
+    depth: number,
+    topY: number,
+    parent?: PositionedNode,
+  ): PositionedNode {
     maxDepth = Math.max(maxDepth, depth)
     const x = depthOffsets[depth] ?? ROOT_X
+    const reservedHeight = subtreeHeight(node)
 
     if (!node.children.length) {
-      const leaf = { ...node, x, y: cursorY }
+      const leaf = {
+        ...node,
+        x,
+        y: topY + (reservedHeight - node.height) / 2,
+      }
       positioned.push(leaf)
-      cursorY += Math.max(30, node.height) + ROW_GAP
       if (parent) {
         edges.push({ from: parent, to: leaf })
       }
       return leaf
     }
 
-    const children = node.children.map((child) => walk(child, depth + 1))
+    let childTopY = topY
+    const children = node.children.map((child, index) => {
+      const positionedChild = walk(child, depth + 1, childTopY)
+      childTopY += subtreeHeight(child)
+
+      if (index < node.children.length - 1) {
+        childTopY += siblingGap(depth, child, node.children[index + 1])
+      }
+
+      return positionedChild
+    })
     const firstCenter = children[0].y + children[0].height / 2
     const lastCenter = children[children.length - 1].y + children[children.length - 1].height / 2
     const centerY = (firstCenter + lastCenter) / 2
@@ -375,7 +418,7 @@ function layoutTree(root: MeasuredNode): LayoutResult {
     return current
   }
 
-  walk(root, 0)
+  walk(root, 0, MARGIN_Y)
 
   const width = (depthOffsets[maxDepth] ?? ROOT_X) + (depthWidths[maxDepth] ?? 0) + 120
   const contentBottom = positioned.reduce((max, node) => Math.max(max, node.y + node.height), MARGIN_Y)
