@@ -104,11 +104,13 @@ const BOX_PADDING_X = 18
 const BOX_PADDING_Y = 12
 const LEAF_LINE_HEIGHT = 18
 const BOX_LINE_HEIGHT = 18
+const ROOT_LINE_HEIGHT = 34
 const MIN_BOX_HEIGHT = 40
-const MIN_ROOT_HEIGHT = 44
+const MIN_ROOT_HEIGHT = 76
 const FONT_SIZE = 14
-const ROOT_FONT_SIZE = 18
+const ROOT_FONT_SIZE = 33
 const LEAF_TRAIL = 42
+const ROOT_FILL = '#4B5563'
 
 const BRANCH_COLORS = ['#F97316', '#A855F7', '#B7791F', '#FF5CB8', '#2563EB', '#14B8A6']
 
@@ -280,7 +282,7 @@ function measureTree(
       : hasChildren
         ? Math.max(NODE_MIN_WIDTH, Math.min(NODE_MAX_WIDTH, widestLine + BOX_PADDING_X * 2))
         : Math.max(LEAF_MIN_WIDTH, Math.min(LEAF_MAX_WIDTH, widestLine))
-  const lineHeight = hasChildren || depth === 0 ? BOX_LINE_HEIGHT : LEAF_LINE_HEIGHT
+  const lineHeight = depth === 0 ? ROOT_LINE_HEIGHT : hasChildren ? BOX_LINE_HEIGHT : LEAF_LINE_HEIGHT
   const minHeight = depth === 0 ? MIN_ROOT_HEIGHT : hasChildren ? MIN_BOX_HEIGHT : lines.length * lineHeight
   const height =
     depth === 0 || hasChildren
@@ -769,8 +771,8 @@ export default function MindmapWorkbench() {
                   const color = colorForBranch(node.topLevelIndex)
                   const isRoot = node.depth === 0
                   const lightLineColor = tintColor(color, 0.78)
-                  const boxFill = isRoot ? '#172033' : tintColor(color, 0.72)
-                  const boxStroke = isRoot ? '#172033' : boxFill
+                  const boxFill = isRoot ? ROOT_FILL : tintColor(color, 0.72)
+                  const boxStroke = isRoot ? ROOT_FILL : boxFill
                   const textColor = isRoot ? '#ffffff' : '#111111'
 
                   if (!node.hasChildren && node.depth > 0) {
@@ -826,7 +828,11 @@ export default function MindmapWorkbench() {
                           <tspan
                             key={`${node.id}-${index}`}
                             x={BOX_PADDING_X}
-                            y={BOX_PADDING_Y + (isRoot ? ROOT_FONT_SIZE : FONT_SIZE) + index * BOX_LINE_HEIGHT}
+                            y={
+                              BOX_PADDING_Y +
+                              (isRoot ? ROOT_FONT_SIZE : FONT_SIZE) +
+                              index * (isRoot ? ROOT_LINE_HEIGHT : BOX_LINE_HEIGHT)
+                            }
                           >
                             {line}
                           </tspan>
