@@ -89,11 +89,9 @@ const sampleMarkdown = `# 总体目标
 - 常态化推进`
 
 const BACKGROUND = '#FFFEFE'
-const ROOT_MIN_WIDTH = 80
-const NODE_MIN_WIDTH = 128
-const NODE_MAX_WIDTH = 320
-const LEAF_MIN_WIDTH = 88
-const LEAF_MAX_WIDTH = 320
+const ROOT_TEXT_WIDTH = 406
+const NODE_TEXT_WIDTH = 408
+const LEAF_TEXT_WIDTH = 420
 const COLUMN_GAP = 74
 const ROOT_X = 30
 const MARGIN_Y = 36
@@ -102,17 +100,20 @@ const SECTION_BRANCH_GAP = 24
 const DETAIL_BRANCH_GAP = 18
 const BOX_PADDING_X = 18
 const BOX_PADDING_Y = 12
-const LEAF_LINE_HEIGHT = 18
-const BOX_LINE_HEIGHT = 18
-const ROOT_LINE_HEIGHT = 34
-const MIN_BOX_HEIGHT = 40
-const MIN_ROOT_HEIGHT = 76
-const FONT_SIZE = 14
-const ROOT_FONT_SIZE = 33
+const CHILD_FONT_SIZE = 40
+const ROOT_FONT_SIZE = 40
 const LEAF_TRAIL = 42
 const ROOT_FILL = '#4B5563'
 
-const BRANCH_COLORS = ['#F97316', '#A855F7', '#B7791F', '#FF5CB8', '#2563EB', '#14B8A6']
+const BRANCH_COLORS = ['#6DD4E5', '#A855F7', '#B7791F', '#FF5CB8', '#2563EB', '#14B8A6']
+
+const ROOT_BOX_WIDTH = ROOT_TEXT_WIDTH + BOX_PADDING_X * 2
+const NODE_BOX_WIDTH = NODE_TEXT_WIDTH + BOX_PADDING_X * 2
+const LEAF_LINE_HEIGHT = Math.ceil(CHILD_FONT_SIZE * 1.45)
+const BOX_LINE_HEIGHT = Math.ceil(CHILD_FONT_SIZE * 1.45)
+const ROOT_LINE_HEIGHT = Math.ceil(ROOT_FONT_SIZE * 1.1)
+const MIN_BOX_HEIGHT = BOX_LINE_HEIGHT + BOX_PADDING_Y * 2
+const MIN_ROOT_HEIGHT = ROOT_LINE_HEIGHT + BOX_PADDING_Y * 2
 
 function createNode(text: string, seed: string, index: number): OutlineNode {
   return {
@@ -231,6 +232,10 @@ function estimateTextWidth(text: string, fontSize: number) {
   return Math.ceil(charUnits(text) * fontSize * 0.92)
 }
 
+function unitsForWidth(width: number, fontSize: number) {
+  return Math.max(1, width / (fontSize * 0.92))
+}
+
 function wrapText(text: string, maxUnits: number) {
   const compact = text.replace(/\s+/g, ' ').trim()
   if (!compact) {
@@ -267,21 +272,22 @@ function measureTree(
   const hasChildren = node.children.length > 0
   const lines =
     depth === 0
-      ? wrapText(node.text, 11)
+      ? wrapText(node.text, unitsForWidth(ROOT_TEXT_WIDTH, ROOT_FONT_SIZE))
       : hasChildren
-        ? wrapText(node.text, 16)
-        : wrapText(node.text, 22)
+        ? wrapText(node.text, unitsForWidth(NODE_TEXT_WIDTH, CHILD_FONT_SIZE))
+        : wrapText(node.text, unitsForWidth(LEAF_TEXT_WIDTH, CHILD_FONT_SIZE))
 
   const widestLine = lines.reduce(
-    (max, line) => Math.max(max, estimateTextWidth(line, depth === 0 ? ROOT_FONT_SIZE : FONT_SIZE)),
+    (max, line) =>
+      Math.max(max, estimateTextWidth(line, depth === 0 ? ROOT_FONT_SIZE : CHILD_FONT_SIZE)),
     0,
   )
   const width =
     depth === 0
-      ? Math.max(ROOT_MIN_WIDTH, Math.min(360, widestLine + BOX_PADDING_X * 2))
+      ? Math.max(widestLine + BOX_PADDING_X * 2, ROOT_BOX_WIDTH)
       : hasChildren
-        ? Math.max(NODE_MIN_WIDTH, Math.min(NODE_MAX_WIDTH, widestLine + BOX_PADDING_X * 2))
-        : Math.max(LEAF_MIN_WIDTH, Math.min(LEAF_MAX_WIDTH, widestLine))
+        ? Math.max(widestLine + BOX_PADDING_X * 2, NODE_BOX_WIDTH)
+        : Math.max(widestLine, LEAF_TEXT_WIDTH)
   const lineHeight = depth === 0 ? ROOT_LINE_HEIGHT : hasChildren ? BOX_LINE_HEIGHT : LEAF_LINE_HEIGHT
   const minHeight = depth === 0 ? MIN_ROOT_HEIGHT : hasChildren ? MIN_BOX_HEIGHT : lines.length * lineHeight
   const height =
@@ -780,7 +786,7 @@ export default function MindmapWorkbench() {
                       <g key={node.id} transform={`translate(${node.x}, ${node.y})`}>
                         <text
                           fill="#222222"
-                          fontSize={FONT_SIZE}
+                          fontSize={CHILD_FONT_SIZE}
                           fontWeight="500"
                           fontFamily="var(--font-sans)"
                         >
@@ -788,7 +794,7 @@ export default function MindmapWorkbench() {
                             <tspan
                               key={`${node.id}-${index}`}
                               x="0"
-                              y={FONT_SIZE + index * LEAF_LINE_HEIGHT}
+                              y={CHILD_FONT_SIZE + index * LEAF_LINE_HEIGHT}
                             >
                               {line}
                             </tspan>
@@ -820,7 +826,7 @@ export default function MindmapWorkbench() {
 
                       <text
                         fill={textColor}
-                        fontSize={isRoot ? ROOT_FONT_SIZE : FONT_SIZE}
+                        fontSize={isRoot ? ROOT_FONT_SIZE : CHILD_FONT_SIZE}
                         fontWeight={isRoot ? '700' : '600'}
                         fontFamily="var(--font-sans)"
                       >
@@ -830,7 +836,7 @@ export default function MindmapWorkbench() {
                             x={BOX_PADDING_X}
                             y={
                               BOX_PADDING_Y +
-                              (isRoot ? ROOT_FONT_SIZE : FONT_SIZE) +
+                              (isRoot ? ROOT_FONT_SIZE : CHILD_FONT_SIZE) +
                               index * (isRoot ? ROOT_LINE_HEIGHT : BOX_LINE_HEIGHT)
                             }
                           >
