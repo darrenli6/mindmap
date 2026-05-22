@@ -2,6 +2,8 @@
 
 import { useDeferredValue, useId, useRef, useState } from 'react'
 
+type StyleKey = 'style1' | 'style2'
+
 type OutlineNode = {
   id: string
   text: string
@@ -88,7 +90,6 @@ const sampleMarkdown = `# 总体目标
 - 固化制度
 - 常态化推进`
 
-const BACKGROUND = '#FFFEFE'
 const ROOT_TEXT_WIDTH = 406
 const NODE_TEXT_WIDTH = 408
 const LEAF_TEXT_WIDTH = 420
@@ -103,9 +104,46 @@ const BOX_PADDING_Y = 12
 const CHILD_FONT_SIZE = 40
 const ROOT_FONT_SIZE = 40
 const LEAF_TRAIL = 42
-const ROOT_FILL = '#4B5563'
-
-const BRANCH_COLORS = ['#6DD4E5', '#A855F7', '#B7791F', '#FF5CB8', '#2563EB', '#14B8A6']
+const STYLE_OPTIONS: Array<{
+  key: StyleKey
+  label: string
+  description: string
+  title: string
+  subtitle: string
+  background: string
+  surface: string
+  rootFill: string
+  branchColors: string[]
+  leafStyle: 'underline' | 'pill'
+  connectorStyle: 'elbow' | 'curve'
+}> = [
+  {
+    key: 'style1',
+    label: '样式一',
+    description: '正式汇报风',
+    title: '更接近示例图的思维导图样式',
+    subtitle: '背景固定为浅白色，分支按一级主题着色，适合正式汇报与导出。',
+    background: '#FFFEFE',
+    surface: '#fffefe',
+    rootFill: '#4B5563',
+    branchColors: ['#6DD4E5', '#A855F7', '#B7791F', '#FF5CB8', '#2563EB', '#14B8A6'],
+    leafStyle: 'underline',
+    connectorStyle: 'elbow',
+  },
+  {
+    key: 'style2',
+    label: '样式二',
+    description: '清爽卡片风',
+    title: '更清爽的卡片式思维导图样式',
+    subtitle: '纯白背景，支持从一级到十级标题层级，适合用 Markdown 标题直接生成深层结构导图。',
+    background: '#FFFFFF',
+    surface: '#FFFFFF',
+    rootFill: '#17324D',
+    branchColors: ['#0F766E', '#2563EB', '#DC6B2F', '#A21CAF', '#0EA5A4', '#B45309'],
+    leafStyle: 'pill',
+    connectorStyle: 'curve',
+  },
+]
 
 const ROOT_BOX_WIDTH = ROOT_TEXT_WIDTH + BOX_PADDING_X * 2
 const NODE_BOX_WIDTH = NODE_TEXT_WIDTH + BOX_PADDING_X * 2
@@ -140,7 +178,7 @@ function parseMarkdown(markdown: string): OutlineNode {
       continue
     }
 
-    const headingMatch = rawLine.match(/^(#{1,6})\s+(.*)$/)
+    const headingMatch = rawLine.match(/^(#{1,10})\s+(.*)$/)
     if (headingMatch) {
       const level = headingMatch[1].length
       const text = normalizeText(headingMatch[2])
@@ -264,6 +302,7 @@ function wrapText(text: string, maxUnits: number) {
 
 function measureTree(
   node: OutlineNode,
+  style: (typeof STYLE_OPTIONS)[number],
   depth = 0,
   topLevelIndex = -1,
   ownIndex = 0,
@@ -287,16 +326,23 @@ function measureTree(
       ? Math.max(widestLine + BOX_PADDING_X * 2, ROOT_BOX_WIDTH)
       : hasChildren
         ? Math.max(widestLine + BOX_PADDING_X * 2, NODE_BOX_WIDTH)
-        : Math.max(widestLine, LEAF_TEXT_WIDTH)
+        : style.leafStyle === 'pill'
+          ? Math.max(widestLine + BOX_PADDING_X * 2, 220)
+          : Math.max(widestLine, LEAF_TEXT_WIDTH)
   const lineHeight = depth === 0 ? ROOT_LINE_HEIGHT : hasChildren ? BOX_LINE_HEIGHT : LEAF_LINE_HEIGHT
-  const minHeight = depth === 0 ? MIN_ROOT_HEIGHT : hasChildren ? MIN_BOX_HEIGHT : lines.length * lineHeight
+  const minHeight =
+    depth === 0
+      ? MIN_ROOT_HEIGHT
+      : hasChildren || style.leafStyle === 'pill'
+        ? MIN_BOX_HEIGHT
+        : lines.length * lineHeight
   const height =
-    depth === 0 || hasChildren
+    depth === 0 || hasChildren || style.leafStyle === 'pill'
       ? Math.max(minHeight, lines.length * lineHeight + BOX_PADDING_Y * 2)
       : Math.max(minHeight, lines.length * lineHeight)
 
   const children = node.children.map((child, index) =>
-    measureTree(child, depth + 1, nextTopLevel, index),
+    measureTree(child, style, depth + 1, nextTopLevel, index),
   )
 
   return {
@@ -344,11 +390,13 @@ function subtreeHeight(node: MeasuredNode): number {
   return Math.max(node.height, childrenHeight + gapsHeight)
 }
 
-function collectDepthWidths(root: MeasuredNode) {
+function collectDepthWidths(root: MeasuredNode, style: (typeof STYLE_OPTIONS)[number]) {
   const widths: number[] = []
 
   function walk(node: MeasuredNode) {
-    const visualWidth = node.width + (node.hasChildren || node.depth === 0 ? 0 : LEAF_TRAIL)
+    const visualWidth =
+      node.width +
+      (node.hasChildren || node.depth === 0 || style.leafStyle === 'pill' ? 0 : LEAF_TRAIL)
     widths[node.depth] = Math.max(widths[node.depth] ?? 0, visualWidth)
     for (const child of node.children) {
       walk(child)
@@ -359,11 +407,11 @@ function collectDepthWidths(root: MeasuredNode) {
   return widths
 }
 
-function layoutTree(root: MeasuredNode): LayoutResult {
+function layoutTree(root: MeasuredNode, style: (typeof STYLE_OPTIONS)[number]): LayoutResult {
   let maxDepth = 0
   const positioned: PositionedNode[] = []
   const edges: Edge[] = []
-  const depthWidths = collectDepthWidths(root)
+  const depthWidths = collectDepthWidths(root, style)
   const depthOffsets: number[] = [ROOT_X]
 
   for (let depth = 1; depth < depthWidths.length; depth += 1) {
@@ -435,8 +483,8 @@ function layoutTree(root: MeasuredNode): LayoutResult {
   return { positioned, edges, width, height }
 }
 
-function colorForBranch(index: number) {
-  return BRANCH_COLORS[((index % BRANCH_COLORS.length) + BRANCH_COLORS.length) % BRANCH_COLORS.length]
+function colorForBranch(index: number, style: (typeof STYLE_OPTIONS)[number]) {
+  return style.branchColors[((index % style.branchColors.length) + style.branchColors.length) % style.branchColors.length]
 }
 
 function tintColor(hex: string, amount: number) {
@@ -457,17 +505,31 @@ function tintColor(hex: string, amount: number) {
   return `#${toHex(red)}${toHex(green)}${toHex(blue)}`
 }
 
-function renderPath(from: PositionedNode, to: PositionedNode) {
+function renderPath(
+  from: PositionedNode,
+  to: PositionedNode,
+  style: (typeof STYLE_OPTIONS)[number],
+) {
   const startX = from.x + from.width
   const startY = from.y + from.height / 2
   const endX = to.x
   const endY = to.y + to.height / 2
-  const elbowX = startX + Math.max(24, (endX - startX) * 0.38)
+  if (style.connectorStyle === 'curve') {
+    const curve = Math.max(32, (endX - startX) * 0.42)
+    return `M ${startX} ${startY} C ${startX + curve} ${startY}, ${endX - curve} ${endY}, ${endX} ${endY}`
+  }
 
+  const elbowX = startX + Math.max(24, (endX - startX) * 0.38)
   return `M ${startX} ${startY} L ${elbowX} ${startY} L ${elbowX} ${endY} L ${endX} ${endY}`
 }
 
-async function svgToCanvas(svg: SVGSVGElement, width: number, height: number, scale = 2) {
+async function svgToCanvas(
+  svg: SVGSVGElement,
+  width: number,
+  height: number,
+  background: string,
+  scale = 2,
+) {
   const serializer = new XMLSerializer()
   const markup = serializer.serializeToString(svg)
   const blob = new Blob([markup], { type: 'image/svg+xml;charset=utf-8' })
@@ -491,7 +553,7 @@ async function svgToCanvas(svg: SVGSVGElement, width: number, height: number, sc
     }
 
     context.scale(scale, scale)
-    context.fillStyle = BACKGROUND
+    context.fillStyle = background
     context.fillRect(0, 0, width, height)
     context.drawImage(image, 0, 0, width, height)
 
@@ -599,15 +661,17 @@ Q`
 
 export default function MindmapWorkbench() {
   const [markdown, setMarkdown] = useState(sampleMarkdown)
+  const [styleKey, setStyleKey] = useState<StyleKey>('style1')
   const [isExporting, setIsExporting] = useState(false)
   const [isPasting, setIsPasting] = useState(false)
   const deferredMarkdown = useDeferredValue(markdown)
   const svgTitleId = useId()
   const svgRef = useRef<SVGSVGElement | null>(null)
+  const selectedStyle = STYLE_OPTIONS.find((option) => option.key === styleKey) ?? STYLE_OPTIONS[0]
 
   const parsedTree = parseMarkdown(deferredMarkdown)
-  const measuredTree = measureTree(parsedTree)
-  const { positioned, edges, width, height } = layoutTree(measuredTree)
+  const measuredTree = measureTree(parsedTree, selectedStyle)
+  const { positioned, edges, width, height } = layoutTree(measuredTree, selectedStyle)
 
   const exportPng = async () => {
     if (!svgRef.current) {
@@ -616,7 +680,7 @@ export default function MindmapWorkbench() {
 
     setIsExporting(true)
     try {
-      const canvas = await svgToCanvas(svgRef.current, width, height, 2)
+      const canvas = await svgToCanvas(svgRef.current, width, height, selectedStyle.background, 2)
       triggerDownload(canvas.toDataURL('image/png'), 'mindmap.png')
     } finally {
       setIsExporting(false)
@@ -630,7 +694,7 @@ export default function MindmapWorkbench() {
 
     setIsExporting(true)
     try {
-      const canvas = await svgToCanvas(svgRef.current, width, height, 2)
+      const canvas = await svgToCanvas(svgRef.current, width, height, selectedStyle.background, 2)
       const pdfBlob = buildPdfFromJpeg(
         dataUrlToUint8Array(canvas.toDataURL('image/jpeg', 0.96)),
         canvas.width,
@@ -663,19 +727,22 @@ export default function MindmapWorkbench() {
   }
 
   return (
-    <main className="min-h-screen bg-[#FFFEFE] text-slate-900">
+    <main className="min-h-screen text-slate-900" style={{ backgroundColor: selectedStyle.background }}>
       <div className="mx-auto flex min-h-screen w-full max-w-[1680px] flex-col gap-6 px-4 py-5 sm:px-6 lg:px-8">
-        <header className="rounded-[28px] border border-[#f0e9e9] bg-[#fffefe] px-6 py-5 shadow-[0_18px_40px_rgba(15,23,42,0.05)]">
+        <header
+          className="rounded-[28px] border border-[#f0e9e9] px-6 py-5 shadow-[0_18px_40px_rgba(15,23,42,0.05)]"
+          style={{ backgroundColor: selectedStyle.surface }}
+        >
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">
                 Markdown Mind Map
               </p>
               <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
-                更接近示例图的思维导图样式
+                {selectedStyle.title}
               </h1>
               <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500 sm:text-base">
-                背景固定为 #FFFEFE，导出 PNG 和 PDF 也沿用同一底色。分支按一级主题着色，节点样式更接近正式汇报图。
+                {selectedStyle.subtitle}
               </p>
             </div>
             <div className="flex flex-wrap gap-3">
@@ -704,6 +771,27 @@ export default function MindmapWorkbench() {
               </button>
             </div>
           </div>
+          <div className="mt-5 flex flex-wrap gap-3">
+            {STYLE_OPTIONS.map((option) => {
+              const active = option.key === selectedStyle.key
+              return (
+                <button
+                  key={option.key}
+                  type="button"
+                  onClick={() => setStyleKey(option.key)}
+                  className="inline-flex min-w-[148px] flex-col items-start rounded-2xl border px-4 py-3 text-left transition"
+                  style={{
+                    backgroundColor: active ? '#ffffff' : 'transparent',
+                    borderColor: active ? '#0f172a' : '#ddd6d6',
+                    boxShadow: active ? '0 10px 24px rgba(15,23,42,0.08)' : 'none',
+                  }}
+                >
+                  <span className="text-sm font-semibold text-slate-900">{option.label}</span>
+                  <span className="mt-1 text-xs text-slate-500">{option.description}</span>
+                </button>
+              )
+            })}
+          </div>
         </header>
 
         <section className="grid min-h-[calc(100vh-11rem)] grid-cols-1 gap-6 lg:grid-cols-[minmax(340px,0.8fr)_minmax(0,1.6fr)]">
@@ -711,7 +799,11 @@ export default function MindmapWorkbench() {
             <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[#f1eded] px-5 py-4">
               <div>
                 <h2 className="text-lg font-semibold text-slate-950">Markdown</h2>
-                <p className="mt-1 text-sm text-slate-500">左侧编辑内容，右侧生成近似示例图风格的导图。</p>
+                <p className="mt-1 text-sm text-slate-500">
+                  {selectedStyle.key === 'style2'
+                    ? '样式二支持 `#` 到 `##########` 作为一到十级节点。'
+                    : '左侧编辑内容，右侧生成近似示例图风格的导图。'}
+                </p>
               </div>
               <div className="flex flex-wrap gap-2">
                 <button
@@ -740,10 +832,17 @@ export default function MindmapWorkbench() {
             />
           </div>
 
-          <div className="flex min-h-[420px] flex-col overflow-hidden rounded-[30px] border border-[#f0e9e9] bg-[#fffefe] shadow-[0_18px_34px_rgba(15,23,42,0.04)]">
+          <div
+            className="flex min-h-[420px] flex-col overflow-hidden rounded-[30px] border border-[#f0e9e9] shadow-[0_18px_34px_rgba(15,23,42,0.04)]"
+            style={{ backgroundColor: selectedStyle.surface }}
+          >
             <div className="border-b border-[#f1eded] px-5 py-4">
               <h2 className="text-lg font-semibold text-slate-950">思维导图</h2>
-              <p className="mt-1 text-sm text-slate-500">主分支分色、折线连线、轻边框标签、纯净浅底导出。</p>
+              <p className="mt-1 text-sm text-slate-500">
+                {selectedStyle.key === 'style1'
+                  ? '主分支分色、折线连线、轻边框标签、纯净浅底导出。'
+                  : '纯白背景、圆角卡片、柔和曲线连接，支持一级到十级标题节点。'}
+              </p>
             </div>
             <div className="flex-1 overflow-auto p-4">
               <svg
@@ -755,33 +854,47 @@ export default function MindmapWorkbench() {
                 xmlns="http://www.w3.org/2000/svg"
               >
                 <title id={svgTitleId}>根据 Markdown 生成的思维导图</title>
-                <rect width={width} height={height} fill={BACKGROUND} />
+                <rect width={width} height={height} fill={selectedStyle.background} />
 
                 {edges.map(({ from, to }) => {
-                  const branchColor = colorForBranch(to.topLevelIndex)
+                  const branchColor = colorForBranch(to.topLevelIndex, selectedStyle)
                   const color = from.depth === 0 ? branchColor : tintColor(branchColor, 0.78)
                   return (
                     <path
                       key={`${from.id}-${to.id}`}
-                      d={renderPath(from, to)}
+                      d={renderPath(from, to, selectedStyle)}
                       fill="none"
-                      stroke={color}
-                      strokeWidth={to.depth <= 1 ? 3.5 : to.hasChildren ? 2.4 : 1.8}
+                      stroke={selectedStyle.connectorStyle === 'curve' ? tintColor(branchColor, 0.12) : color}
+                      strokeWidth={
+                        selectedStyle.connectorStyle === 'curve'
+                          ? to.depth <= 1
+                            ? 4
+                            : to.hasChildren
+                              ? 2.8
+                              : 2
+                          : to.depth <= 1
+                            ? 3.5
+                            : to.hasChildren
+                              ? 2.4
+                              : 1.8
+                      }
                       strokeLinecap="round"
+                      strokeLinejoin="round"
                       opacity={to.depth === 1 ? 0.98 : 0.88}
                     />
                   )
                 })}
 
                 {positioned.map((node) => {
-                  const color = colorForBranch(node.topLevelIndex)
+                  const color = colorForBranch(node.topLevelIndex, selectedStyle)
                   const isRoot = node.depth === 0
                   const lightLineColor = tintColor(color, 0.78)
-                  const boxFill = isRoot ? ROOT_FILL : tintColor(color, 0.72)
-                  const boxStroke = isRoot ? ROOT_FILL : boxFill
+                  const boxFill = isRoot ? selectedStyle.rootFill : tintColor(color, selectedStyle.key === 'style2' ? 0.84 : 0.72)
+                  const boxStroke =
+                    isRoot || selectedStyle.key === 'style1' ? boxFill : tintColor(color, 0.58)
                   const textColor = isRoot ? '#ffffff' : '#111111'
 
-                  if (!node.hasChildren && node.depth > 0) {
+                  if (!node.hasChildren && node.depth > 0 && selectedStyle.leafStyle === 'underline') {
                     return (
                       <g key={node.id} transform={`translate(${node.x}, ${node.y})`}>
                         <text
@@ -818,10 +931,10 @@ export default function MindmapWorkbench() {
                       <rect
                         width={node.width}
                         height={node.height}
-                        rx={isRoot ? 16 : 12}
+                        rx={isRoot ? (selectedStyle.key === 'style2' ? 20 : 16) : selectedStyle.key === 'style2' ? 18 : 12}
                         fill={boxFill}
                         stroke={boxStroke}
-                        strokeWidth={0}
+                        strokeWidth={selectedStyle.key === 'style2' && !isRoot ? 1.4 : 0}
                       />
 
                       <text
